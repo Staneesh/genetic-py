@@ -101,11 +101,7 @@ def genetic(A: np.matrix, B: np.matrix, c: float, initial_population_size: int, 
         MUTATION_P = 0.1
         best_samples = convert_to_binary(best_samples, d + 2)
         new_population = get_new_population(best_samples, CROSSOVER_P, MUTATION_P) #should not escape 2^-d, 2^d bounds!
-        #print(new_population)
-        #print("lol")
         population = convert_from_binary(new_population, d + 2)
-        #print(population)
-        #print("lol")
         #print("AFter conv:", population)
     return global_max
 
