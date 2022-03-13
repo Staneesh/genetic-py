@@ -1,6 +1,7 @@
 from hashlib import new
 from mimetypes import init
 from multiprocessing import pool
+import os
 import numpy as np
 from enum import Enum
 import random as rd
@@ -16,39 +17,42 @@ def get_population(gen_method: PopulationGenerationMethod, size: int, d: int, di
     right = -left
     lerpi = lambda l, r, t : int( (1 - t) * l + t * r + 0.5 )
 
-    population = [ rd.randint(left, right) if gen_method == PopulationGenerationMethod.Random \
-                   else lerpi(left, right, i/size) for i in range(size) ]
-
-    res = [ np.matrix(x) for x in population ] #????
-    return res
+    population = [np.matrix([rd.randint(left, right) if gen_method == PopulationGenerationMethod.Random \
+                   else lerpi(left, right, i/size) for j in range(dimension)]) for i in range(size) ]
+    return population
 
 def convert_to_binary(samples: list, bits_needed: int):
     res = []
     for x in samples:
-        #print(x)
-        res.append( [ np.binary_repr(xi, width=bits_needed) for xi in x.tolist()[0] ] )
-    res = [ x[ 0 ] for x in res ]
+        res.append([ np.binary_repr(xi, width=bits_needed) for xi in x.tolist()[0] ] )
     
-    resi = []
-    for x in res:
-        resi.append( [ int(c) for c in x ] )
+    resi = res
+    for i in range(len(res)):
+        for j in range(len(res[i])):
+            resi[i][j] = [ int(c) for c in res[i][j] ]
     return resi
 
-def bool2int(x):
-    y = 0
-    for i,j in enumerate(x):
-        y += j<<i
-    return y
+def bool2int(x, bits): #1101
+    num = 0
+    for i in range(len(x)):
+        if(x[i]):
+            num += pow(2, bits - i - 1)
+    if(x[0]):
+        num -= 2 * pow(2, bits - 1)
+    return num
 
 def convert_from_binary(samples: list, bits_needed: int):
-    res = [np.array(bool2int(x)).reshape(1, 1) for x in samples]
-    return res
+    resi = []
+    for i in samples:
+        res = [(bool2int(x, bits_needed)) for x in i]
+        resi.append(np.matrix(res))
+    return resi
 
 def target_value(A: np.matrix, B: np.matrix, c: float, x: np.matrix):
     return (x.T * A * x + B.T * x + c).item()
 
 def evaluate_population(A: np.matrix, B: np.matrix, c: float, x: list):
-    return [ target_value(A, B, c, xi) for xi in x ]
+    return [ target_value(A, B, c, xi.transpose()) for xi in x ]
 
 def upper_genes(bits: list):
     return bits[:int(len(bits) / 2)]
@@ -57,9 +61,12 @@ def lower_genes(bits: list):
     return bits[int(len(bits) / 2):]
 
 def crossover(two_kids: list):
-    crossed1 = upper_genes(two_kids[ 0 ]) + lower_genes(two_kids[ 1 ])
-    crossed2 = upper_genes(two_kids[ 1 ]) + lower_genes(two_kids[ 0 ])
-    return [ crossed1, crossed2 ]
+    crossed = []
+    for i in range(len(two_kids[0])):
+        crossed1 = lower_genes(two_kids[ 1 ][i]) + upper_genes(two_kids[ 0 ][i])
+        crossed2 = lower_genes(two_kids[ 0 ][i]) + upper_genes(two_kids[ 1 ][i])
+        crossed.append([crossed1, crossed2])
+    return crossed
 
 def get_new_population(parents: list, crossover_p: float, mutation_p: float):
     kids = []
@@ -88,17 +95,22 @@ def genetic(A: np.matrix, B: np.matrix, c: float, initial_population_size: int, 
 
         x_y = [ [population[ i ], evaluated[ i ] ] for i in range(len(population)) ]
         x_y.sort(key = lambda row: -row[1])
-        K_BEST = 2
+        K_BEST = 4
         best_samples = [ x[ 0 ] for x in x_y[:K_BEST] ]
         CROSSOVER_P = 0.7
         MUTATION_P = 0.1
         best_samples = convert_to_binary(best_samples, d + 2)
         new_population = get_new_population(best_samples, CROSSOVER_P, MUTATION_P) #should not escape 2^-d, 2^d bounds!
+        #print(new_population)
+        #print("lol")
         population = convert_from_binary(new_population, d + 2)
+        #print(population)
+        #print("lol")
         #print("AFter conv:", population)
     return global_max
 
 def main():
+    os.system('cls')
     A = None
     B = None
     c = None
@@ -135,9 +147,9 @@ def main():
         dimension = 2
         #A = np.array([1, 1, 0, 1]).reshape(dimension, dimension)
         #B = np.array([5, -2]).reshape(dimension, 1)
-        A = np.matrix([-10])
-        B = np.matrix([10])
-        c = 5
+        A = np.matrix([[-1, 1], [0, 1]])
+        B = np.matrix([5, -2]).transpose()
+        c = 0
         d = 2
         initial_population_size = 100
     solution = genetic(A, B, c, initial_population_size, d)
