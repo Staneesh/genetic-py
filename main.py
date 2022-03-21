@@ -75,6 +75,10 @@ def upper_genes(bits: list):
 def lower_genes(bits: list):
     return bits[int(len(bits) / 2):]
 
+def mutate(kid):
+    vectorIndex = np.random.choice(range(0, len(kid)))
+    bitIndex = np.random.choice(range(0, len(kid[0])))
+    kid[vectorIndex][bitIndex] = 1 - kid[vectorIndex][bitIndex]
 
 def crossover(two_kids: list):
     crossed = []
@@ -98,6 +102,9 @@ def get_new_population(parents: list, crossover_p: float, mutation_p: float):
                     dzieciuchy = crossover(dzieciuchy)
                 #do_we_mutate = np.random.uniform(0, 1) >= 1 - mutation_p
                 for d in dzieciuchy:
+                    isMutating = np.random.uniform(0, 1) >= 1 - mutation_p
+                    if isMutating:
+                        mutate(d)
                     kids.append(d)
     return kids
 
@@ -107,7 +114,7 @@ def genetic(A: np.matrix, B: np.matrix, c: float, initial_population_size: int, 
     population = get_population(
         PopulationGenerationMethod.Random, initial_population_size, d, dimension)
     global_max = -1000000000000
-    for loop_index in range(100):
+    for loop_index in range(1):
         evaluated = evaluate_population(A, B, c, population)
         for v in evaluated:
             global_max = max(global_max, v)
