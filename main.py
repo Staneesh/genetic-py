@@ -64,11 +64,11 @@ def convert_from_binary(samples: list, bits_needed: int):
     return resi
 
 
-def target_value(A: np.matrix, B: np.matrix, c: float, x: np.matrix):
+def target_value(A: np.matrix, B: np.matrix, c: int, x: np.matrix):
     return (x.T * A * x + B.T * x + c).item()
 
 
-def evaluate_population(A: np.matrix, B: np.matrix, c: float, x: list):
+def evaluate_population(A: np.matrix, B: np.matrix, c: int, x: list):
     return [target_value(A, B, c, xi.transpose()) for xi in x]
 
 
@@ -86,12 +86,13 @@ def mutate(kid):
     return kid
 
 def crossover(two_kids: list):
-    crossed = []
+    crossed = [[], []]
     for i in range(len(two_kids[0])):
         crossed1 = lower_genes(two_kids[1][i]) + upper_genes(two_kids[0][i])
         crossed2 = lower_genes(two_kids[0][i]) + upper_genes(two_kids[1][i])
-        crossed.append([crossed1, crossed2])
-    print("X", crossed)
+        crossed[0].append(crossed1)
+        crossed[1].append(crossed2)
+    #print("X", crossed)
     return crossed
 
 
@@ -119,7 +120,7 @@ def get_new_population(parents: list, crossover_p: float, mutation_p: float, ini
     return kids
 
 
-def genetic(A: np.matrix, B: np.matrix, c: float, initial_population_size: int, d: int, loops: int, CROSSOVER_P: float, MUTATION_P: float):
+def genetic(A: np.matrix, B: np.matrix, c: int, initial_population_size: int, d: int, loops: int, CROSSOVER_P: float, MUTATION_P: float):
     dimension = len(A)
     population = get_population(
         PopulationGenerationMethod.Random, initial_population_size, d, dimension)
@@ -132,7 +133,8 @@ def genetic(A: np.matrix, B: np.matrix, c: float, initial_population_size: int, 
        
 
     for loop_index in range(loops):
-        #print(loop_index)
+        if loop_index % int(np.sqrt(loops)) == 0:
+            print("loop", loop_index,"/",loops,"...")
         evaluated = evaluate_population(A, B, c, population)
         for v in evaluated:
             global_max = max(global_max, v)
@@ -150,7 +152,7 @@ def genetic(A: np.matrix, B: np.matrix, c: float, initial_population_size: int, 
         #print("XY SIZE", x_y)
         parents = []
         for _ in range(initial_population_size):
-            sorted_values = [knot[1] for knot in x_y]
+            sorted_values = [int(knot[1]) for knot in x_y]
             #print("OG SORTED", sorted_values)
             shift_factor = 0
             if sorted_values[len(sorted_values) - 1] < 0:
@@ -176,6 +178,7 @@ def genetic(A: np.matrix, B: np.matrix, c: float, initial_population_size: int, 
         # should not escape 2^-d, 2^d bounds!
         new_population = get_new_population(
             parents, CROSSOVER_P, MUTATION_P, initial_population_size)
+        #print(new_population)
         population = convert_from_binary(new_population, d + 2)
         #print("AFter conv:", population)
     if dimension == 2:
@@ -214,14 +217,14 @@ def main():
         A = np.ones(dimension * dimension).reshape(dimension, dimension)
         for y in range(dimension):
             for x in range(dimension):
-                A[y][x] = float(
+                A[y][x] = int(
                     input("Enter A[" + str(y) + "][" + str(x) + "]..."))
 
         B = np.ones(dimension).reshape(dimension, 1)
         for i in range(dimension):
-            B[i][0] = float(input("Enter B[" + str(i) + "]..."))
+            B[i][0] = int(input("Enter B[" + str(i) + "]..."))
 
-        c = float(input("Enter c..."))
+        c = int(input("Enter c..."))
 
         initial_population_size = int(
             input("Enter initial population size..."))
@@ -239,12 +242,12 @@ def main():
             print("Bad loops! Exiting...")
             exit(1)
 
-        CROSSOVER_P = int(input("Enter crossover probability ..."))
+        CROSSOVER_P = float(input("Enter crossover probability ..."))
         if CROSSOVER_P < 0 or CROSSOVER_P > 1:
             print("Bad crossover probability! Exiting...")
             exit(1)
 
-        MUTATION_P = int(input("Enter mutation probability ..."))
+        MUTATION_P = float(input("Enter mutation probability ..."))
         if MUTATION_P < 0 or MUTATION_P > 1:
             print("Bad mutation probability! Exiting...")
             exit(1)
@@ -252,20 +255,24 @@ def main():
         dimension = 2
         #A = np.array([1, 1, 0, 1]).reshape(dimension, dimension)
         #B = np.array([5, -2]).reshape(dimension, 1)
+        
+        #TEST: 2D example, expected outcome == 13
         #A = np.matrix([[-1, -1], [0, -1]])
         #B = np.matrix([5, -2]).transpose()
+        #TEST: 3D example, expected outcome == 0
         A = np.matrix([[-1, 0, 0], [0, -1, 0], [0, 0, -1]])
         B = np.matrix([0, 0, 0]).transpose()
         c = 0
-        d = 2
-        initial_population_size = 4
-        loops = 100
+        d = 5
+        initial_population_size = 30
+        loops = 10
         CROSSOVER_P = 0.7
-        MUTATION_P = 0.2
+        MUTATION_P = 0.1
     solution, last_population = genetic(A, B, c, initial_population_size, d, loops, CROSSOVER_P, MUTATION_P)
     print("SOLUTION =", solution)
     print("Last population (vector of pairs - each pair is (x, y), where x is a 'standing' vector and y is a number)")
     print("We use WIFO (as permitted), so the points are sorted by y's.")
+    print("We will plot it if the dimension of A is 2. It may lag if loops is too large.")
     for i, knot in enumerate(last_population):
         print(i + 1, ": ", knot)
 
