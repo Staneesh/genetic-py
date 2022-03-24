@@ -3,13 +3,17 @@
 # - mutations
 # - roulette
 
+from cgitb import small
 from hashlib import new
 from mimetypes import init
 from multiprocessing import pool
+import matplotlib.pyplot as plt
 import os
+from sys import prefix
 import numpy as np
 from enum import Enum
 import random as rd
+from matplotlib import cm
 
 DEBUG = 1
 
@@ -79,6 +83,7 @@ def mutate(kid):
     vectorIndex = np.random.choice(range(0, len(kid)))
     bitIndex = np.random.choice(range(0, len(kid[0])))
     kid[vectorIndex][bitIndex] = 1 - kid[vectorIndex][bitIndex]
+    return kid
 
 def crossover(two_kids: list):
     crossed = []
@@ -86,16 +91,18 @@ def crossover(two_kids: list):
         crossed1 = lower_genes(two_kids[1][i]) + upper_genes(two_kids[0][i])
         crossed2 = lower_genes(two_kids[0][i]) + upper_genes(two_kids[1][i])
         crossed.append([crossed1, crossed2])
+    print("X", crossed)
     return crossed
 
 
-def get_new_population(parents: list, crossover_p: float, mutation_p: float):
+def get_new_population(parents: list, crossover_p: float, mutation_p: float, initial_population_size: int):
     kids = []
     for m in range(len(parents)):
         matka = parents[m]
         for o in range(m, len(parents)):
             ojczym = parents[o]
-            if matka != ojczym:
+            #if matka != ojczym:
+            if True:
                 dzieciuchy = [matka, ojczym]
                 do_we_crossover = np.random.uniform(0, 1) >= 1 - crossover_p
                 if do_we_crossover:
@@ -104,42 +111,90 @@ def get_new_population(parents: list, crossover_p: float, mutation_p: float):
                 for d in dzieciuchy:
                     isMutating = np.random.uniform(0, 1) >= 1 - mutation_p
                     if isMutating:
-                        mutate(d)
+                        d = mutate(d)
                     kids.append(d)
+                    if len(kids) == initial_population_size:
+                        return kids
+    
     return kids
 
 
-def genetic(A: np.matrix, B: np.matrix, c: float, initial_population_size: int, d: int):
+def genetic(A: np.matrix, B: np.matrix, c: float, initial_population_size: int, d: int, loops: int, CROSSOVER_P: float, MUTATION_P: float):
     dimension = len(A)
     population = get_population(
         PopulationGenerationMethod.Random, initial_population_size, d, dimension)
     global_max = -1000000000000
-    for loop_index in range(1):
+
+    ax = None
+    if dimension == 2:
+        fig = plt.figure()
+        ax = fig.add_subplot(projection='3d')
+       
+
+    for loop_index in range(loops):
+        #print(loop_index)
         evaluated = evaluate_population(A, B, c, population)
         for v in evaluated:
             global_max = max(global_max, v)
 
         x_y = [[population[i], evaluated[i]] for i in range(len(population))]
         x_y.sort(key=lambda row: -row[1])
-        #print(f"x_y[ 0 ] = {x_y [ 0 ]}, x_y [ last ] = {x_y[ len(x_y) - 1 ]}")
+    
+        if dimension == 2:
+            x = [x[0].tolist()[0][0] for x in x_y]
+            y = [x[0].tolist()[0][1] for x in x_y]
+            z = [x[1] for x in x_y]
+            ax.scatter(x, y, z, label=loop_index, s=150, cmap=cm.coolwarm)
+            ax.legend()
+        
+        #print("XY SIZE", x_y)
+        parents = []
+        for _ in range(initial_population_size):
+            sorted_values = [knot[1] for knot in x_y]
+            #print("OG SORTED", sorted_values)
+            shift_factor = 0
+            if sorted_values[len(sorted_values) - 1] < 0:
+                shift_factor = 2 * abs(sorted_values[len(sorted_values) - 1])
+            sorted_values = [v + shift_factor for v in sorted_values]
+            #print("SHIFTED SORTED", sorted_values)
+            suffix_sums = [sum(sorted_values[i:]) for i in range(len(sorted_values))]
+            #print("SUFFIX ", suffix_sums)
 
-        smallest_sum_y = x_y[len(x_y) - 1][1]
-        biggest_sum_y = sum([knot[1] for knot in x_y])  # sum of all y-s
-        choice_value = np.random.choice(
-            range(smallest_sum_y, biggest_sum_y + 1))
+            choice = None
+            if (suffix_sums[0] == 0):
+                choice = 0
+            else:
+                choice = np.random.choice(range(1, suffix_sums[0] + 1))
+            #print("RANODM CHOICE", choice)
+            bigger_than_choice = [v for v in suffix_sums if v >= choice]
+            choice_index = len(bigger_than_choice) - 1
+            roulette_selection = x_y[choice_index]
+            #print("SELECTION:", roulette_selection)
+            parents.append(roulette_selection[0])
 
-        K_BEST = 5
-        best_samples = [x[0] for x in x_y[:K_BEST]]  # only they will reproduce
-
-        CROSSOVER_P = 0.7
-        MUTATION_P = 0.1
-        best_samples = convert_to_binary(best_samples, d + 2)
+        parents = convert_to_binary(parents, d + 2)
         # should not escape 2^-d, 2^d bounds!
         new_population = get_new_population(
-            best_samples, CROSSOVER_P, MUTATION_P)
+            parents, CROSSOVER_P, MUTATION_P, initial_population_size)
         population = convert_from_binary(new_population, d + 2)
         #print("AFter conv:", population)
-    return global_max
+    if dimension == 2:
+        solution_x = x_y[0][0].tolist()[0][0]
+        solution_y = x_y[0][0].tolist()[0][1]
+        X = np.arange(solution_x-20, solution_x+20, 0.5)
+        Y = np.arange(solution_y-20, solution_y+20, 0.5)
+        X, Y = np.meshgrid(X, Y)
+        Z = c
+        Z += B.tolist()[0][0]*X
+        Z += B.tolist()[1][0]*Y
+        #print(A.tolist())
+        Z += A.tolist()[0][0]*X**2
+        Z += X*Y*(A.tolist()[0][1]+A.tolist()[1][0])
+        Z += A.tolist()[1][1]*Y**2
+        
+        ax.plot_wireframe(X, Y, Z)
+        plt.show()
+    return global_max, x_y
 
 
 def main():
@@ -178,17 +233,41 @@ def main():
         if d < 0:
             print("Bad d! Exiting...")
             exit(1)
+
+        loops = int(input("Enter loops limit..."))
+        if loops < 0:
+            print("Bad loops! Exiting...")
+            exit(1)
+
+        CROSSOVER_P = int(input("Enter crossover probability ..."))
+        if CROSSOVER_P < 0 or CROSSOVER_P > 1:
+            print("Bad crossover probability! Exiting...")
+            exit(1)
+
+        MUTATION_P = int(input("Enter mutation probability ..."))
+        if MUTATION_P < 0 or MUTATION_P > 1:
+            print("Bad mutation probability! Exiting...")
+            exit(1)
     else:
         dimension = 2
         #A = np.array([1, 1, 0, 1]).reshape(dimension, dimension)
         #B = np.array([5, -2]).reshape(dimension, 1)
-        A = np.matrix([[-1, 1], [0, 1]])
-        B = np.matrix([5, -2]).transpose()
+        #A = np.matrix([[-1, -1], [0, -1]])
+        #B = np.matrix([5, -2]).transpose()
+        A = np.matrix([[-1, 0, 0], [0, -1, 0], [0, 0, -1]])
+        B = np.matrix([0, 0, 0]).transpose()
         c = 0
         d = 2
-        initial_population_size = 100
-    solution = genetic(A, B, c, initial_population_size, d)
-    print(solution)
+        initial_population_size = 4
+        loops = 100
+        CROSSOVER_P = 0.7
+        MUTATION_P = 0.2
+    solution, last_population = genetic(A, B, c, initial_population_size, d, loops, CROSSOVER_P, MUTATION_P)
+    print("SOLUTION =", solution)
+    print("Last population (vector of pairs - each pair is (x, y), where x is a 'standing' vector and y is a number)")
+    print("We use WIFO (as permitted), so the points are sorted by y's.")
+    for i, knot in enumerate(last_population):
+        print(i + 1, ": ", knot)
 
 
 if __name__ == '__main__':
